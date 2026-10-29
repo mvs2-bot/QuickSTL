@@ -1,1 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QuickSTL</title>
+<meta name="description" content="STL-Dateien im Browser ansehen und vermessen">
+<meta name="theme-color" content="#f2f2f7">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" sizes="180x180">
+<link rel="manifest" href="manifest.json">
+<script>
+  // Darstellung gilt für alle Seiten (overall-theme), vor dem ersten Rendern setzen. Standard: hell.
+  (function () {
+    var t = 'light';
+    try { t = localStorage.getItem('overall-theme') || localStorage.getItem('dash-theme') || 'light'; } catch (e) {}
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  /* Layout: Kopfzeile wie im Dashboard, darunter großer Viewer links und schmale Info-Spalte rechts (Handy: untereinander).
+     Tokens 1:1 aus shared/hub.css des Dashboards, dazu die App-Farbe von QuickSTL. */
+  :root {
+    --bg: #f2f2f7; --card: #fff; --well: #f2f2f7; --hover: #e9e9ef; --line: #e2e2e7; --sep: rgba(60, 60, 67, .14);
+    --ink: #1c1c1e; --text: #3a3a3c; --mute: #6c6c70;
+    --p1: #0066cc; --p1-soft: #e6f0fd; --on-p1: #fff;
+    --app: #e11d48; --stage: #f7f7fa; --grid: #d8d8de;
+    --radius: 18px; --radius-s: 12px; --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 14px rgba(0, 0, 0, .04);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  }
+  [data-theme="dark"] {
+    color-scheme: dark; --bg: #000; --card: #1c1c1e; --well: #2c2c2e; --hover: #3a3a3c; --line: #38383a; --sep: rgba(84, 84, 88, .55);
+    --ink: #f5f5f7; --text: #d1d1d6; --mute: #98989f; --p1: #409cff; --p1-soft: #0b2540; --on-p1: #001a33;
+    --app: #ff375f; --stage: #121214; --grid: #3a3a3e; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+  body { margin: 0; min-height: 100vh; -webkit-tap-highlight-color: transparent; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.45; letter-spacing: -.005em; -webkit-font-smoothing: antialiased; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--p1); outline-offset: 2px; }
+  .ic { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--bg); }
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent);
+    -webkit-backdrop-filter: saturate(1.8) blur(18px); backdrop-filter: saturate(1.8) blur(18px); border-bottom: 1px solid var(--sep); }
+  .bar { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
+  .logo { width: 36px; height: 36px; border-radius: 9px; background: var(--app); display: grid; place-items: center; color: #fff; flex: none; }
+  .logo .ic { width: 22px; height: 22px; }
+  .head { flex: 1; min-width: 0; }
+  h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); line-height: 1.15; }
+  .sub { font-size: 12px; font-weight: 500; color: var(--mute); }
+  .back { border: 0; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--p1); white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  .back .ic { width: 14px; height: 14px; stroke-width: 2.2; }
+  .icon-btn { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--card); box-shadow: var(--shadow); display: inline-grid; place-items: center; padding: 0; color: var(--ink); flex: none; }
+  .icon-btn:hover, .back:hover { background: var(--hover); }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding-block: 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
+  @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; min-width: 0; }
+  .card h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--mute); }
+
+  .viewer { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .vtools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--sep); }
+  .vtools .spacer { flex: 1; }
+  .stage { position: relative; flex: 1; height: min(62vh, 560px); min-height: 320px; background: var(--stage); touch-action: none; }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .stage.drag::after { content: "STL-Datei hier ablegen"; position: absolute; inset: 12px; border: 2px dashed var(--p1); border-radius: var(--radius-s);
+    display: grid; place-items: center; color: var(--p1); font-weight: 600; background: color-mix(in srgb, var(--p1-soft) 70%, transparent); }
+  .hint { position: absolute; left: 12px; bottom: 10px; font-size: 11px; font-weight: 500; color: var(--mute); background: color-mix(in srgb, var(--card) 80%, transparent); padding: 4px 9px; border-radius: 999px; }
+  .axes { position: absolute; right: 12px; bottom: 10px; display: flex; gap: 6px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .axes span { padding: 2px 7px; border-radius: 999px; background: color-mix(in srgb, var(--card) 80%, transparent); }
+
+  .seg { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--well); border-radius: 9px; padding: 2px; gap: 2px; }
+  .seg button { border: 0; background: none; border-radius: 7px; padding: 5px 12px; min-height: 30px; font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+  .seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); font-weight: 600; }
+  [data-theme="dark"] .seg button[aria-pressed="true"] { background: #636366; }
+  .mini { width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; background: var(--well); color: var(--ink); display: inline-grid; place-items: center; }
+  .mini:hover { background: var(--hover); }
+
+  .side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .file { display: flex; align-items: center; gap: 12px; }
+  .file .fi { width: 40px; height: 40px; border-radius: 10px; background: color-mix(in srgb, var(--app) 14%, var(--card)); color: var(--app); display: grid; place-items: center; flex: none; }
+  .file b { display: block; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+  .file small { color: var(--mute); font-size: 12px; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 40px; margin-top: 12px; background: var(--p1); color: var(--on-p1); border: 0; border-radius: 10px; font-weight: 600; font-size: 14px; }
+  .btn:hover { filter: brightness(1.06); }
+  .note { margin: 8px 0 0; font-size: 11px; color: var(--mute); text-align: center; }
+
+  .dims { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .dims div { background: var(--well); border-radius: 10px; padding: 8px 10px; }
+  .dims i { font-style: normal; font-size: 11px; font-weight: 700; }
+  .dims b { display: block; font-size: 16px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .dims small { font-size: 11px; color: var(--mute); }
+  .x { color: #e5484d; } .y { color: #30a46c; } .z { color: #0090ff; }
+  ul.plain { list-style: none; margin: 10px 0 0; padding: 0; }
+  ul.plain li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; font-variant-numeric: tabular-nums; }
+  ul.plain li + li { border-top: 1px solid var(--sep); }
+  ul.plain li span { color: var(--mute); }
+  ul.plain li b { color: var(--ink); font-weight: 600; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; }
+  .row + .row { border-top: 1px solid var(--sep); }
+  .row > span { color: var(--ink); font-weight: 500; }
+  .swatches { display: flex; gap: 6px; }
+  .swatches button { width: 24px; height: 24px; border-radius: 50%; border: 0; padding: 0; background: var(--c); box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .2); }
+  .swatches button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--p1); }
+  .switch { position: relative; width: 44px; height: 26px; border-radius: 999px; border: 0; background: var(--hover); padding: 0; transition: background .2s; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s; }
+  .switch[aria-checked="true"] { background: #34c759; }
+  .switch[aria-checked="true"]::after { transform: translateX(18px); }
+
+  @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="cube" viewBox="0 0 24 24"><path d="M12 2.8 20 7.3v9.4l-8 4.5-8-4.5V7.3z"/><path d="M4 7.3l8 4.5 8-4.5M12 11.8v9.4"/></symbol>
+</svg>
+
+<header>
+  <div class="wrap bar">
+    <a class="back" href="/" aria-label="Zurück zum Dashboard"><svg class="ic" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>Dashboard</a>
+    <span class="logo" aria-hidden="true"><svg class="ic"><use href="#cube"/></svg></span>
+    <div class="head"><h1>QuickSTL</h1><div class="sub">STL ansehen &amp; vermessen</div></div>
+    <button class="icon-btn" id="themeBtn" type="button" aria-label="Hell oder dunkel" title="Hell / Dunkel">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+<main>
+  <section class="card viewer" aria-label="3D-Ansicht">
+    <div class="vtools">
+      <div class="seg" role="group" aria-label="Ansicht">
+        <button type="button" data-view="iso" aria-pressed="true">3D</button>
+        <button type="button" data-view="front" aria-pressed="false">Vorne</button>
+        <button type="button" data-view="top" aria-pressed="false">Oben</button>
+        <button type="button" data-view="side" aria-pressed="false">Seite</button>
+      </div>
+      <span class="spacer"></span>
+      <button class="mini" id="fitBtn" type="button" aria-label="Modell einpassen" title="Einpassen">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>
+      </button>
+    </div>
+    <div class="stage" id="stage">
+      <span class="hint" id="hint">Ziehen = drehen · Scrollen = zoomen · Rechts­klick = verschieben</span>
+      <div class="axes" aria-hidden="true"><span class="x">X</span><span class="y">Y</span><span class="z">Z</span></div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <h2>Datei</h2>
+      <div class="file">
+        <span class="fi"><svg class="ic"><use href="#cube"/></svg></span>
+        <div style="min-width:0"><b id="fname">Beispiel: Halter.stl</b><small id="fsize">Beispielmodell</small></div>
+      </div>
+      <input type="file" id="fileIn" accept=".stl" hidden>
+      <button class="btn" type="button" id="openBtn">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>STL öffnen
+      </button>
+      <p class="note">oder Datei auf die Ansicht ziehen · bleibt auf deinem Gerät</p>
+    </section>
+
+    <section class="card">
+      <h2>Maße</h2>
+      <div class="dims">
+        <div><i class="x">X</i><b id="dx">–</b><small>mm</small></div>
+        <div><i class="y">Y</i><b id="dy">–</b><small>mm</small></div>
+        <div><i class="z">Z</i><b id="dz">–</b><small>mm</small></div>
+      </div>
+      <ul class="plain">
+        <li><span>Volumen</span><b id="vol">–</b></li>
+        <li><span>Filament</span><b id="fil">–</b></li>
+        <li><span>Dreiecke</span><b id="tris">–</b></li>
+      </ul>
+      <p class="note">Filament grob geschätzt: PLA, 1,2 mm Wand, 15 % Füllung</p>
+    </section>
+
+    <section class="card">
+      <h2>Darstellung</h2>
+      <div class="row"><span>Modus</span>
+        <div class="seg" role="group" aria-label="Modus">
+          <button type="button" data-mode="solid" aria-pressed="true">Volumen</button>
+          <button type="button" data-mode="wire" aria-pressed="false">Gitter</button>
+        </div>
+      </div>
+      <div class="row"><span>Farbe</span>
+        <div class="swatches" role="group" aria-label="Modellfarbe">
+          <button type="button" style="--c:#e11d48" data-color="#e11d48" aria-pressed="true" aria-label="Rose"></button>
+          <button type="button" style="--c:#0066cc" data-color="#0066cc" aria-pressed="false" aria-label="Blau"></button>
+          <button type="button" style="--c:#8e8e93" data-color="#8e8e93" aria-pressed="false" aria-label="Grau"></button>
+          <button type="button" style="--c:#f2f2f2" data-color="#f2f2f2" aria-pressed="false" aria-label="Weiß"></button>
+        </div>
+      </div>
+      <div class="row"><span>Bauplatte</span>
+        <button class="switch" id="gridSw" type="button" role="switch" aria-checked="true" aria-label="Bauplatte mit 10-mm-Raster"></button>
+      </div>
+    </section>
+  </aside>
+
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const fmt = (n, d = 1) => n.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  // Volumen = Summe der signierten Tetraeder (Ursprung + Dreieck), in mm³
+  function volume(geo) {
+    const p = geo.attributes.position.array; let v = 0;
+    for (let i = 0; i < p.length; i += 9) {
+      v += p[i] * (p[i + 4] * p[i + 8] - p[i + 5] * p[i + 7]) - p[i + 1] * (p[i + 3] * p[i + 8] - p[i + 5] * p[i + 6]) + p[i + 2] * (p[i + 3] * p[i + 7] - p[i + 4] * p[i + 6]);
+    }
+    return Math.abs(v / 6);
+  }
+  function area(geo) {
+    const p = geo.attributes.position.array, a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(); let s = 0;
+    for (let i = 0; i < p.length; i += 9) {
+      a.fromArray(p, i); b.fromArray(p, i + 3).sub(a); c.fromArray(p, i + 6).sub(a);
+      s += b.cross(c).length() / 2;
+    }
+    return s;
+  }
+  // shortcut: Hülle ≈ Oberfläche × Wandstärke, Rest mit Füllung – kein Slicer; reicht für eine Größenordnung
+  const PLA = 1.24, WALL = 1.2, INFILL = 0.15; // g/cm³, mm, Anteil
+  function grams(vol, surf) {
+    const shell = Math.min(vol, surf * WALL);
+    return (shell + INFILL * (vol - shell)) / 1000 * PLA;
+  }
+  const cube = new THREE.BoxGeometry(10, 10, 10).toNonIndexed();
+  console.assert(Math.abs(volume(cube) - 1000) < 1e-6 && Math.abs(area(cube) - 600) < 1e-6, 'Volumen/Fläche-Selbsttest');
+  console.assert(Math.abs(grams(1000, 600) - 0.94488) < 1e-9, 'Filament-Selbsttest: 10-mm-Würfel');
+
+  const stage = $('stage');
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  stage.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 5000);
+  camera.up.set(0, 0, 1);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a95, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.7); sun.position.set(1, -1.5, 2); scene.add(sun);
+
+  const mat = new THREE.MeshStandardMaterial({ color: '#e11d48', roughness: 0.55, metalness: 0.05 });
+  let mesh = null, grid = null, size = new THREE.Vector3(), view = 'iso';
+
+  // Beispielmodell: Halter (Grundplatte + Rückwand + Lippe), Maße in mm, als Ersatz bis eine eigene Datei geladen ist
+  function sample() {
+    const parts = [[80, 60, 4, 0, 0, 2], [80, 6, 50, 0, 27, 25], [80, 4, 10, 0, -28, 9]];
+    const geos = parts.map(([w, d, h, x, y, z]) => new THREE.BoxGeometry(w, d, h).translate(x, y, z).toNonIndexed());
+    const pos = []; geos.forEach(g => pos.push(...g.attributes.position.array));
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+    return g;
+  }
+
+  function show(geo, name, bytes) {
+    if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox, c = new THREE.Vector3(); bb.getCenter(c);
+    geo.translate(-c.x, -c.y, -bb.min.z); // mittig auf die Bauplatte stellen
+    geo.computeBoundingBox(); geo.boundingBox.getSize(size);
+    mesh = new THREE.Mesh(geo, mat); scene.add(mesh);
+    $('fname').textContent = name;
+    $('fsize').textContent = !bytes ? 'Beispielmodell' : bytes < 1048576 ? fmt(bytes / 1024, 0) + ' KB' : fmt(bytes / 1048576, 1) + ' MB';
+    $('dx').textContent = fmt(size.x); $('dy').textContent = fmt(size.y); $('dz').textContent = fmt(size.z);
+    const vol = volume(geo);
+    $('vol').textContent = fmt(vol / 1000, 2) + ' cm³';
+    $('fil').textContent = '≈ ' + fmt(grams(vol, area(geo)), 0) + ' g';
+    $('tris').textContent = (geo.attributes.position.count / 3).toLocaleString('de-DE');
+    buildGrid(); fit();
+  }
+
+  function buildGrid() {
+    if (grid) scene.remove(grid);
+    const span = Math.max(100, Math.ceil(Math.max(size.x, size.y) * 1.6 / 10) * 10);
+    grid = new THREE.GridHelper(span, span / 10, css('--mute'), css('--grid'));
+    grid.rotation.x = Math.PI / 2; grid.visible = $('gridSw').getAttribute('aria-checked') === 'true';
+    scene.add(grid);
+  }
+
+  function fit() {
+    const half = Math.atan(Math.tan(camera.fov * Math.PI / 360) * Math.min(1, camera.aspect)); // Hochformat: Breite begrenzt
+    const r = size.length() / 2 || 50, d = r / Math.sin(half) * 1.1;
+    const dir = { iso: [1, -1.3, 0.9], front: [0, -1, 0.0001], top: [0, -0.0001, 1], side: [1, 0, 0.0001] }[view];
+    const t = new THREE.Vector3(0, 0, size.z / 2);
+    camera.position.copy(t).add(new THREE.Vector3(...dir).normalize().multiplyScalar(d));
+    controls.target.copy(t); controls.update();
+  }
+
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    if (mesh) fit();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  (function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+
+  function load(file) {
+    if (!file) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try { const g = new THREE.STLLoader().parse(rd.result); g.computeVertexNormals(); show(g, file.name, file.size); } // manche Exporter schreiben Null-Normalen
+      catch (e) { $('fname').textContent = 'Datei ist keine gültige STL'; $('fsize').textContent = file.name; }
+    };
+    rd.readAsArrayBuffer(file);
+  }
+  $('openBtn').onclick = () => $('fileIn').click();
+  $('fileIn').onchange = e => load(e.target.files[0]);
+  ['dragenter', 'dragover'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); stage.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(t => stage.addEventListener(t, e => { e.preventDefault(); stage.classList.remove('drag'); }));
+  stage.addEventListener('drop', e => load(e.dataTransfer.files[0]));
+
+  const pick = (sel, btn) => document.querySelectorAll(sel).forEach(b => b.setAttribute('aria-pressed', b === btn));
+  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; pick('[data-view]', b); fit(); });
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { mat.wireframe = b.dataset.mode === 'wire'; pick('[data-mode]', b); });
+  document.querySelectorAll('[data-color]').forEach(b => b.onclick = () => { mat.color.set(b.dataset.color); pick('[data-color]', b); });
+  $('fitBtn').onclick = fit;
+  $('gridSw').onclick = e => { const on = e.currentTarget.getAttribute('aria-checked') !== 'true'; e.currentTarget.setAttribute('aria-checked', on); grid.visible = on; };
+  const MOON = $('themeBtn').innerHTML;
+  const SUN = '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>';
+  function applyTheme(t, save) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('themeBtn').innerHTML = t === 'dark' ? SUN : MOON;
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', t === 'dark' ? '#000000' : '#f2f2f7');
+    if (save) { try { localStorage.setItem('overall-theme', t); } catch (e) {} }
+    buildGrid();
+  }
+  $('themeBtn').onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true);
+  window.addEventListener('storage', e => { if (e.key === 'overall-theme' && e.newValue) applyTheme(e.newValue, false); });
+  if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'Ziehen = drehen · Zwei Finger = zoomen & verschieben';
+
+  show(sample(), 'Beispiel: Halter.stl', 0);
+  applyTheme(document.documentElement.getAttribute('data-theme') || 'light', false);
+})();
+</script>
+<script src="shared/ios-nav.js" defer></script>
+</body>
+</html>
