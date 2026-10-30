@@ -46,8 +46,7 @@
   header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 82%, transparent);
     -webkit-backdrop-filter: saturate(1.8) blur(18px); backdrop-filter: saturate(1.8) blur(18px); border-bottom: 1px solid var(--sep); }
   .bar { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
-  .logo { width: 36px; height: 36px; border-radius: 9px; background: var(--p1); display: grid; place-items: center; color: #fff; flex: none; }
-  .logo .ic { width: 22px; height: 22px; }
+  .logo { width: 36px; height: 36px; border-radius: 9px; flex: none; display: block; }
   .head { flex: 1; min-width: 0; }
   h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.02em; color: var(--ink); line-height: 1.15; }
   .sub { font-size: 12px; font-weight: 500; color: var(--mute); }
@@ -120,7 +119,7 @@
 
 <header>
   <div class="wrap bar">
-    <span class="logo" aria-hidden="true"><svg class="ic"><use href="#cube"/></svg></span>
+    <img class="logo" src="icon.svg" alt="">
     <div class="head"><h1>QuickSTL</h1><div class="sub">STL ansehen &amp; vermessen</div></div>
     <button class="icon-btn" id="themeBtn" type="button" aria-label="Hell oder dunkel" title="Hell / Dunkel">
       <svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
